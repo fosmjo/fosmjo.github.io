@@ -14,7 +14,7 @@
 <meta property="og:description" content="概述Asynq 是一款用 go 语言编写的基于 redis 的分布式任务队列，支持即时任务和定时任务。 数据模型Asynq 使用 redis 的 List 和 Sorted Set 作为任务队列，队列中只存储任务ID，任务内容使用 redis 的 Hash 存储。对应的数据模型如下：    数据 key value    List 类型队列 队列名称 成员是任务ID   Sorted Set 类型">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2023-02-18T13:17:28.000Z">
-<meta property="article:modified_time" content="2023-02-18T15:15:40.924Z">
+<meta property="article:modified_time" content="2023-02-18T15:20:15.125Z">
 <meta property="article:author" content="fosmjo">
 <meta property="article:tag" content="asynq">
 <meta property="article:tag" content="task-queue">
@@ -200,7 +200,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://fosmjo.github.io/2023/02/18/asynq/" data-id="clea3qq7k0000cvokgcjs4gv6" data-title="asynq 原理分析" class="article-share-link">分享</a>
+      <a data-url="https://fosmjo.github.io/2023/02/18/asynq/" data-id="clea3wlwl0000akoz2eh4093t" data-title="asynq 原理分析" class="article-share-link">分享</a>
       
       
       
@@ -212,15 +212,11 @@
     
 <nav id="article-nav">
   
-    <a href="/2023/02/18/genesis/" id="article-nav-newer" class="article-nav-link-wrap">
-      <strong class="article-nav-caption">前一篇</strong>
-      <div class="article-nav-title">
-        
-          Genesis
-        
-      </div>
-    </a>
   
+    <a href="/2023/02/12/genesis/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">Genesis</div>
+    </a>
   
 </nav>
 
@@ -271,11 +267,11 @@
       <ul>
         
           <li>
-            <a href="/2023/02/18/genesis/">Genesis</a>
+            <a href="/2023/02/18/asynq/">asynq 原理分析</a>
           </li>
         
           <li>
-            <a href="/2023/02/18/asynq/">asynq 原理分析</a>
+            <a href="/2023/02/12/genesis/">Genesis</a>
           </li>
         
       </ul>

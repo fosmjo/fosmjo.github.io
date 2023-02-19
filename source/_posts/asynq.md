@@ -1,11 +1,11 @@
 ---
-title: asynq 原理分析
+title: Asynq 原理分析
 date: 2023-02-18 21:17:28
 tags: [asynq, task-queue, redis, go]
 ---
 
 ## 概述
-Asynq 是一款用 go 语言编写的基于 redis 的分布式任务队列，支持即时任务和定时任务。
+[Asynq](https://github.com/hibiken/asynq) 是一款用 go 语言编写的基于 redis 的分布式任务队列，支持即时任务和定时任务。
 
 
 ## 数据模型

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport">
+  <meta name="description" content="yanm1ng&#39;s blog">
+  <meta name="keyword" content="hexo-theme, vuejs">
+  
+    <link rel="shortcut icon" type="image/ico" href="/favicon.ico"/>
+  
+  <title>
+    
+      Asynq 原理分析 | Fosmjo&#39;s Blog
+    
+  </title>
+  <link href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <link href="//cdnjs.cloudflare.com/ajax/libs/nprogress/0.2.0/nprogress.min.css" rel="stylesheet">
+  <link href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/tomorrow.min.css" rel="stylesheet">
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+  <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/geopattern/1.2.3/js/geopattern.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/nprogress/0.2.0/nprogress.min.js"></script>
+  
+  
+  
+  
+    <!-- MathJax support START -->
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <!-- MathJax support END -->
+  
+
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+<div class="wechat-share">
+  <img src="/css/images/logo.png" />
+</div>
+  <body>
+    <header class="header fixed-header">
+  <div class="header-container">
+    <a class="home-link" href="/">
+      <div class="logo"></div>
+      <span>Fosmjo's Blog</span>
+    </a>
+    <ul class="right-list">
+      
+        <li class="list-item">
+          
+            <a href="/" class="item-link">Home</a>
+          
+        </li>
+      
+        <li class="list-item">
+          
+            <a href="/tags/" class="item-link">Tags</a>
+          
+        </li>
+      
+        <li class="list-item">
+          
+            <a href="/archives/" class="item-link">Archives</a>
+          
+        </li>
+      
+        <li class="list-item">
+          
+            <a href="/about/" class="item-link">About</a>
+          
+        </li>
+      
+      
+    </ul>
+    <div class="menu">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </div>
+    <div class="menu-mask">
+      <ul class="menu-list">
+        
+          <li class="menu-item">
+            
+              <a href="/" class="menu-link">Home</a>
+            
+          </li>
+        
+          <li class="menu-item">
+            
+              <a href="/tags/" class="menu-link">Tags</a>
+            
+          </li>
+        
+          <li class="menu-item">
+            
+              <a href="/archives/" class="menu-link">Archives</a>
+            
+          </li>
+        
+          <li class="menu-item">
+            
+              <a href="/about/" class="menu-link">About</a>
+            
+          </li>
+        
+      </ul>
+    </div>
+    
+  </div>
+</header>
+
+    <div id="article-banner">
+  <h2>Asynq 原理分析</h2>
+  <p class="post-date">2023-02-18</p>
+  <div class="arrow-down">
+    <a href="javascript:;"></a>
+  </div>
+</div>
+<main class="app-body flex-box">
+  <!-- Article START -->
+  <article class="post-article">
+    <section class="markdown-content"><h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h2><p><a target="_blank" rel="noopener" href="https://github.com/hibiken/asynq">Asynq</a> 是一款用 go 语言编写的基于 redis 的分布式任务队列，支持即时任务和定时任务。</p>
+<h2 id="数据模型"><a href="#数据模型" class="headerlink" title="数据模型"></a>数据模型</h2><p>Asynq 使用 redis 的 <code>List</code> 和 <code>Sorted Set</code> 作为任务队列，队列中只存储任务ID，任务内容使用 redis 的 <code>Hash</code> 存储。对应的数据模型如下：</p>
+<table>
+<thead>
+<tr>
+<th>数据</th>
+<th>key</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>List</code> 类型队列</td>
+<td>队列名称</td>
+<td>成员是任务ID</td>
+</tr>
+<tr>
+<td><code>Sorted Set</code> 类型队列</td>
+<td>队列名称</td>
+<td>成员是任务ID，分数是关联的时间戳</td>
+</tr>
+<tr>
+<td>任务内容</td>
+<td>任务ID</td>
+<td><code>&#123;&quot;msg&quot;: &quot;...&quot;, &quot;state&quot;: &quot;...&quot;&#125;</code></td>
+</tr>
+</tbody></table>
+<p>任务状态值域： pending，active，completed，retry，archived，scheduled 。</p>
+<h2 id="运行原理"><a href="#运行原理" class="headerlink" title="运行原理"></a>运行原理</h2><p>Asynq 运行时涉及到以下队列：</p>
+<table>
+<thead>
+<tr>
+<th>队列类型</th>
+<th>使用的redis数据类型</th>
+<th>队列元素内容</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>pending</td>
+<td>List</td>
+<td>task-id</td>
+<td>存储准备执行的任务</td>
+</tr>
+<tr>
+<td>active</td>
+<td>List</td>
+<td>task-id</td>
+<td>存储正在执行的任务</td>
+</tr>
+<tr>
+<td>lease</td>
+<td>Sorted Set</td>
+<td>task-id, lease-expiration-time</td>
+<td>存储正在执行的任务的lease</td>
+</tr>
+<tr>
+<td>completed</td>
+<td>Sorted Set</td>
+<td>task-id, task-exipration-time</td>
+<td>存储成功的且设置了保留期的任务</td>
+</tr>
+<tr>
+<td>retry</td>
+<td>Sorted Set</td>
+<td>task-id, retry-time</td>
+<td>存储一段时间后要重试的任务</td>
+</tr>
+<tr>
+<td>archived</td>
+<td>Sorted Set</td>
+<td>task-id, archive-time</td>
+<td>存储归档任务</td>
+</tr>
+<tr>
+<td>scheduled</td>
+<td>Sorted Set</td>
+<td>task-id, process-time</td>
+<td>存储定时任务</td>
+</tr>
+</tbody></table>
+<p>用户通过 asynq 客户端将任务发布到 asynq 服务器，发布任务时会将即时任务写入 pending 队列，定时任务写入 scheduled 队列。Asynq 服务器端负责执行任务，涉及到 processor，heartbeater，recorver，forwarder，janitor 等多个模块。各模块功能如下：</p>
+<ul>
+<li>processor 模块从 pending 队列中拉取任务，将任务移到 active 队列，为了避免任务执行过程中服务器宕机导致任务丢失，会给每个任务设定一个 lease，并将任务ID和 lease 到期时间写入 lease 列中。每个任务通过单独的 goroutine worker 执行，任务执行有3种情况：<ul>
+<li>执行成功：将任务从 active 和 lease 队列移除，如果任务设置了保留时间，就将任务写入 completed 队列</li>
+<li>执行失败：将任务从 active 和 lease 队列移除，检查任务是否超过指定重试次数，若超过就将任务写入 archived 队列，否则写入 retry 队列</li>
+<li>在 lease 有效期内，worker 没有反馈执行结果：留给 recorver 模块处理</li>
+</ul>
+</li>
+<li>heartbeater 模块定期将 worker 执行信息写入 redis，并延长正在执行的任务的 lease，确保正在执行中的任务不受 lease 到期的影响</li>
+<li>recorver 模块定期检查 lease 队列，将到期的任务移出，检查任务是否超过指定重试次数，若超过就将任务写入 archived 队列，否则写入 retry 队列</li>
+<li>forwarder 模块定期检查 scheduled 和 retry 队列，将到期的任务移到 pending 队列中等待执行</li>
+<li>janitor 模块定期检查 completed 队列，将超过保留期的任务删除</li>
+</ul>
+<h2 id="其它"><a href="#其它" class="headerlink" title="其它"></a>其它</h2><ul>
+<li>Redis 的 <code>List</code> 可用作 FIFO 队列</li>
+<li>Redis 的 <code>Sorted Set</code> 可用作优先队列</li>
+</ul>
+</section>
+    <!-- Tags START -->
+    
+      <div class="tags">
+        <span>Tags:</span>
+        
+  <a href="/tags#asynq" >
+    <span class="tag-code">asynq</span>
+  </a>
+
+  <a href="/tags#task-queue" >
+    <span class="tag-code">task-queue</span>
+  </a>
+
+  <a href="/tags#redis" >
+    <span class="tag-code">redis</span>
+  </a>
+
+  <a href="/tags#go" >
+    <span class="tag-code">go</span>
+  </a>
+
+      </div>
+    
+    <!-- Tags END -->
+    <!-- NAV START -->
+    
+  <div class="nav-container">
+    <!-- reverse left and right to put prev and next in a more logic postition -->
+    
+      <a class="nav-left" href="/2023/02/12/genesis/">
+        <span class="nav-arrow">← </span>
+        
+          Genesis
+        
+      </a>
+    
+    
+  </div>
+
+    <!-- NAV END -->
+    <!-- 打赏 START -->
+    
+    <!-- 打赏 END -->
+    <!-- 二维码 START -->
+    
+    <!-- 二维码 END -->
+    
+      <!-- Utterances START -->
+      <div id="utterances"></div>
+      <script src="https://utteranc.es/client.js"
+        repo=""
+        issue-term="pathname"
+        theme="github-light"
+        crossorigin="anonymous"
+        async></script>    
+      <!-- Utterances END -->
+    
+  </article>
+  <!-- Article END -->
+  <!-- Catalog START -->
+  
+    <aside class="catalog-container">
+  <div class="toc-main">
+    <strong class="toc-title">Catalog</strong>
+    
+      <ol class="toc-nav"><li class="toc-nav-item toc-nav-level-2"><a class="toc-nav-link" href="#%E6%A6%82%E8%BF%B0"><span class="toc-nav-text">概述</span></a></li><li class="toc-nav-item toc-nav-level-2"><a class="toc-nav-link" href="#%E6%95%B0%E6%8D%AE%E6%A8%A1%E5%9E%8B"><span class="toc-nav-text">数据模型</span></a></li><li class="toc-nav-item toc-nav-level-2"><a class="toc-nav-link" href="#%E8%BF%90%E8%A1%8C%E5%8E%9F%E7%90%86"><span class="toc-nav-text">运行原理</span></a></li><li class="toc-nav-item toc-nav-level-2"><a class="toc-nav-link" href="#%E5%85%B6%E5%AE%83"><span class="toc-nav-text">其它</span></a></li></ol>
+    
+  </div>
+</aside>
+  
+  <!-- Catalog END -->
+</main>
+
+<script>
+  (function () {
+    var url = 'https://fosmjo.github.io/2023/02/18/asynq/';
+    var banner = ''
+    if (banner !== '' && banner !== 'undefined' && banner !== 'null') {
+      $('#article-banner').css({
+        'background-image': 'url(' + banner + ')'
+      })
+    } else {
+      $('#article-banner').geopattern(url)
+    }
+    $('.header').removeClass('fixed-header')
+
+    // error image
+    $(".markdown-content img").on('error', function() {
+      $(this).attr('src', '/css/images/error_icon.png')
+      $(this).css({
+        'cursor': 'default'
+      })
+    })
+
+    // zoom image
+    $(".markdown-content img").on('click', function() {
+      var src = $(this).attr('src')
+      if (src !== '/css/images/error_icon.png') {
+        var imageW = $(this).width()
+        var imageH = $(this).height()
+
+        var zoom = ($(window).width() * 0.95 / imageW).toFixed(2)
+        zoom = zoom < 1 ? 1 : zoom
+        zoom = zoom > 2 ? 2 : zoom
+        var transY = (($(window).height() - imageH) / 2).toFixed(2)
+
+        $('body').append('<div class="image-view-wrap"><div class="image-view-inner"><img src="'+ src +'" /></div></div>')
+        $('.image-view-wrap').addClass('wrap-active')
+        $('.image-view-wrap img').css({
+          'width': `${imageW}`,
+          'transform': `translate3d(0, ${transY}px, 0) scale3d(${zoom}, ${zoom}, 1)`
+        })
+        $('html').css('overflow', 'hidden')
+
+        $('.image-view-wrap').on('click', function() {
+          $(this).remove()
+          $('html').attr('style', '')
+        })
+      }
+    })
+  })();
+</script>
+
+
+
+
+
+
+
+    <div class="scroll-top">
+  <span class="arrow-icon"></span>
+</div>
+    <footer class="app-footer">
+  <p class="copyright">
+    &copy; 2023 | Proudly powered by <a href="https://hexo.io" target="_blank">Hexo</a>
+    <br>
+    Theme by <a target="_blank" rel="noopener" href="https://github.com/yanm1ng">yanm1ng</a>
+    
+  </p>
+</footer>
+
+<script>
+  function async(u, c) {
+    var d = document, t = 'script',
+      o = d.createElement(t),
+      s = d.getElementsByTagName(t)[0];
+    o.src = u;
+    if (c) { o.addEventListener('load', function (e) { c(null, e); }, false); }
+    s.parentNode.insertBefore(o, s);
+  }
+</script>
+<script>
+  async("//cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.min.js", function(){
+    FastClick.attach(document.body);
+  })
+</script>
+
+<script>
+  var hasLine = 'true';
+  async("//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js", function(){
+    $('figure pre').each(function(i, block) {
+      var figure = $(this).parents('figure');
+      if (hasLine === 'false') {
+        figure.find('.gutter').hide();
+      }
+      hljs.configure({useBR: true});
+      var lang = figure.attr('class').split(' ')[1] || 'code';
+      var codeHtml = $(this).html();
+      var codeTag = document.createElement('code');
+      codeTag.className = lang;
+      codeTag.innerHTML = codeHtml;
+      $(this).attr('class', '').empty().html(codeTag);
+      figure.attr('data-lang', lang.toUpperCase());
+      hljs.highlightBlock(block);
+    });
+  })
+</script>
+<!-- Baidu Tongji -->
+
+
+<script src="/js/script.js"></script>
+
+
+  </body>
+</html>

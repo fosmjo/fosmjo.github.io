@@ -20,7 +20,7 @@ Asynq 使用 redis 的 `List` 和 `Sorted Set` 作为任务队列，队列中只
 任务状态值域： pending，active，completed，retry，archived，scheduled 。
 
 ## 运行原理
-Asynq 运行时涉及到以下队列：
+每个 Asynq 队列都对应多个 Redis 队列：
 
 | 队列类型 | 使用的redis数据类型 | 队列元素内容 | 描述 |
 | --- | --- | --- | --- |
